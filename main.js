@@ -1,17 +1,18 @@
 const axios = require('axios');
+const _ = require("lodash");
+const sleep = require("await-sleep");
+const Promise = require("bluebird");
 
 // Replace values here
-const TOKEN = "";
-const CHANNEL = "G2HU2PWJW";
-const MESSAGE = "test";
+const TOKEN = "YOUR_TOKEN_HERE";
 
 const slackAPI = axios.create({
   baseURL: 'https://slack.com/api'
 });
 
-const getChannelMembers = async (channelId) => {
+const getUsers = async () => {
   const { data } = await slackAPI.get(
-    `/conversations.members?token=${TOKEN}&channel=${CHANNEL}`
+    `/users.list?token=${TOKEN}`
   );
   if (!data.ok) console.error(data.error);
   return data.members;
@@ -27,7 +28,7 @@ const openDirectMessageChannel = async (userId) => {
 
 const postMessage = async (message, channelId) => {
   const { data } = await slackAPI.post(
-    `/chat.postMessage?token=${TOKEN}&channel=${channelId}&text=${message}`
+    `/chat.postMessage?token=${TOKEN}&channel=${channelId}&text=${encodeURIComponent(message)}`
   );
   if (!data.ok) console.error(data.error);
   return data;
@@ -35,20 +36,28 @@ const postMessage = async (message, channelId) => {
 
 const run = async () => {
   try {
-    const membersIds = await getChannelMembers(CHANNEL);
-    const nbMembers = membersIds.length;
-
-    console.log(`${nbMembers} members in the channel ${CHANNEL}`);
-
-    const promises = membersIds.map(async (memberId, index) => {
-      const channelId = await openDirectMessageChannel(memberId);
-      console.log(`Open direct message channel ${channelId} with user ${memberId}`);
-      return postMessage(MESSAGE, channelId).then(() => {
-        console.log(`Message sent to user ${memberId} (${index+1}/${nbMembers})`);
-      });
+    const users = await getUsers();
+    const members = _.filter(users, user => {
+      return user.is_admin === false && user.deleted === false;
     });
 
-    await Promise.all(promises);
+    console.log("Members Count", members.length);
+
+    await Promise.map(members, async (member, index) => {
+      const message = "YOUR_MESSAGE_HERE";
+      const channelId = await openDirectMessageChannel(member.id);
+
+      console.log(`[${index}] Open direct message channel ${channelId} with user ${member.id}`);
+
+      await postMessage(message, channelId);
+
+      console.log(`[${index}] Message sent to user ${member.id}`)
+
+      await sleep(1000);
+    }, {
+      concurrency: 1
+    });
+
     console.log(`Message sent to all users`);
   } catch (error) {
     console.error(error)
@@ -56,4 +65,3 @@ const run = async () => {
 }
 
 run();
-
